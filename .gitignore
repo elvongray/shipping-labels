@@ -1,0 +1,21 @@
+.idea
+.DS_Store
+# local env files
+.env
+.env*.local
+.env.test.override
+.env*.dev
+.vscode
+node_modules
+dist
+scratch.py
+.pycharm/runConfigurations
+AGENT.md
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+media/
+**/media/
+*.egg-info/
