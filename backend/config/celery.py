@@ -27,6 +27,6 @@ def _task_prerun(task_id, task, _, kwargs, **_extras):
 
 
 @task_postrun.connect
-def _task_postrun():
+def _task_postrun(**_extras):
     logger.info("celery.task.completed")
     structlog.contextvars.clear_contextvars()
