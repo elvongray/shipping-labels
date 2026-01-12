@@ -63,6 +63,5 @@ keep-runtime-typing = true
 
 [tool.pytest.ini_options]
 log_cli = true
-asyncio_mode = "auto"
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
