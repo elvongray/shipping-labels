@@ -1,12 +1,23 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { getImport, listShipments } from "@/api/endpoints";
 import { ApiClientError } from "@/api/errors";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -18,6 +29,23 @@ import {
 
 export default function ReviewPage() {
   const { importId } = useParams({ from: "/review/$importId" });
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 30;
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, debouncedSearch]);
+
   const importQuery = useQuery({
     queryKey: ["importJob", importId],
     queryFn: () => getImport(importId),
@@ -41,18 +69,42 @@ export default function ReviewPage() {
     progressTotal > 0 ? Math.min(100, (progressDone / progressTotal) * 100) : 0;
 
   const shipmentsQuery = useQuery({
-    queryKey: ["shipments", importId, { status: "ALL", search: "", page: 1 }],
-    queryFn: () => listShipments(importId),
+    queryKey: [
+      "shipments",
+      importId,
+      { status: statusFilter, search: debouncedSearch, page, pageSize },
+    ],
+    queryFn: () =>
+      listShipments(importId, {
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+        search: debouncedSearch || undefined,
+        page,
+        page_size: pageSize,
+      }),
     enabled: Boolean(importId),
     refetchInterval: () => {
       if (!importJob) return false;
-      const shouldPoll =
-        importJob.status === "PENDING" || importJob.status === "PROCESSING";
+      const status = importJob.status?.toUpperCase();
+      const shouldPoll = status === "PENDING" || status === "PROCESSING";
       return shouldPoll ? 4000 : false;
     },
+    refetchIntervalInBackground: true,
   });
 
   const shipments = shipmentsQuery.data?.results ?? [];
+  const totalCount = shipmentsQuery.data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const startIndex = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endIndex = Math.min(totalCount, page * pageSize);
+  const isFetchingShipments =
+    shipmentsQuery.isFetching && !shipmentsQuery.isLoading;
+  const pageOptions = useMemo(() => {
+    const pages = [];
+    for (let i = 1; i <= totalPages; i += 1) {
+      pages.push(i);
+    }
+    return pages;
+  }, [totalPages]);
 
   return (
     <div className="p-6">
@@ -115,7 +167,24 @@ export default function ReviewPage() {
             Review and edit shipments before selecting services.
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+              <TabsList>
+                <TabsTrigger value="ALL">All</TabsTrigger>
+                <TabsTrigger value="READY">Ready</TabsTrigger>
+                <TabsTrigger value="NEEDS_INFO">Needs info</TabsTrigger>
+                <TabsTrigger value="INVALID">Invalid</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <div className="flex w-full max-w-sm items-center gap-2">
+              <Input
+                placeholder="Search by order #, name, or address"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+              />
+            </div>
+          </div>
           <div className="rounded-lg border">
             <Table>
               <TableHeader>
@@ -174,6 +243,58 @@ export default function ReviewPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
+          <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              {isFetchingShipments ? "Updating list…" : null}
+              {!isFetchingShipments && totalCount > 0
+                ? `Showing ${startIndex}-${endIndex} of ${totalCount}`
+                : null}
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setPage((prev) => Math.max(1, prev - 1));
+                    }}
+                    aria-disabled={page <= 1}
+                    className={
+                      page <= 1 ? "pointer-events-none opacity-50" : ""
+                    }
+                  />
+                </PaginationItem>
+                {pageOptions.map((pageNumber) => (
+                  <PaginationItem key={`page-${pageNumber}`}>
+                    <PaginationLink
+                      href="#"
+                      isActive={pageNumber === page}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setPage(pageNumber);
+                      }}
+                    >
+                      {pageNumber}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setPage((prev) => Math.min(totalPages, prev + 1));
+                    }}
+                    aria-disabled={page >= totalPages}
+                    className={
+                      page >= totalPages ? "pointer-events-none opacity-50" : ""
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </CardContent>
       </Card>
