@@ -48,6 +48,26 @@ class ImportUploadView(GenericAPIView):
                 {"error": {"code": "MISSING_FILE", "message": "file is required"}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if not upload.name.lower().endswith(".csv"):
+            return Response(
+                {"error": {"code": "INVALID_FILE", "message": "file must be a CSV"}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        content_type = upload.content_type or ""
+        if content_type not in {
+            "text/csv",
+            "application/vnd.ms-excel",
+            "application/csv",
+        }:
+            return Response(
+                {
+                    "error": {
+                        "code": "INVALID_CONTENT_TYPE",
+                        "message": "invalid file type",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         job = ImportJob.objects.create(
             original_filename=upload.name,

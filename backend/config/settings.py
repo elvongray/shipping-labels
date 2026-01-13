@@ -39,6 +39,9 @@ DEBUG = env.bool("DJANGO_DEBUG", default=True)
 
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
+
 
 # Application definition
 
@@ -139,6 +142,13 @@ USE_TZ = True
 STATIC_URL = "static/"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "DATA_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env.int(
+    "FILE_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024
+)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
