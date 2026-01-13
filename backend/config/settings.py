@@ -145,11 +145,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGGING = get_logging_config(DEBUG)
 configure_structlog(DEBUG)
 
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
-CELERY_IMPORTS = ("imports.tasks",)
+CELERY_IMPORTS = ("imports.tasks", "addresses.tasks")
 
 GOOGLE_ADDRESS_API_KEY = env("GOOGLE_ADDRESS_API_KEY", default=None)
 SMARTY_AUTH_ID = env("SMARTY_AUTH_ID", default=None)
