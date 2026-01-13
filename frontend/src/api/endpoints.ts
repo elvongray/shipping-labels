@@ -7,6 +7,20 @@ import type {
   Paginated,
 } from "./types";
 
+type ImportJobResponse = Omit<ImportJob, "id"> & {
+  id?: string;
+  import_job_id?: string;
+};
+
+function normalizeImportJob(data: ImportJobResponse): ImportJob {
+  const id = data.id ?? data.import_job_id;
+  if (!id) {
+    throw new Error("Missing import job id");
+  }
+  const { import_job_id, ...rest } = data;
+  return { ...rest, id };
+}
+
 export type ListShipmentsParams = {
   status?: string;
   search?: string;
@@ -28,14 +42,16 @@ function buildQuery(params?: Record<string, string | number | undefined>) {
 export function uploadImport(file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiFetch<ImportJob>("/imports/", {
+  return apiFetch<ImportJobResponse>("/imports/", {
     method: "POST",
     body: formData,
-  });
+  }).then(normalizeImportJob);
 }
 
 export function getImport(importId: string) {
-  return apiFetch<ImportJob>(`/imports/${importId}/`);
+  return apiFetch<ImportJobResponse>(`/imports/${importId}/`).then(
+    normalizeImportJob,
+  );
 }
 
 export function listShipments(importId: string, params?: ListShipmentsParams) {

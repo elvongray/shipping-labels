@@ -24,7 +24,6 @@ from imports.tasks import (
     task_finalize_import,
     task_parse_csv,
     task_validate_shipments,
-    task_verify_addresses,
 )
 from shipments.models import Shipment
 
@@ -90,7 +89,7 @@ class ImportUploadView(GenericAPIView):
         chain(
             task_parse_csv.si(import_job_id=str(job.id)),
             task_validate_shipments.si(import_job_id=str(job.id)),
-            task_verify_addresses.si(import_job_id=str(job.id)),
+            # task_verify_addresses.si(import_job_id=str(job.id)),
             task_finalize_import.si(import_job_id=str(job.id)),
         ).delay()
 
