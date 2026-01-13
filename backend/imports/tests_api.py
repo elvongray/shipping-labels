@@ -52,3 +52,26 @@ def test_purchase_requires_ready_and_service():
     )
 
     assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_purchase_success_sets_labels():
+    client = APIClient()
+    job = ImportJob.objects.create(original_filename="test.csv")
+    shipment = Shipment.objects.create(
+        import_job=job,
+        row_number=1,
+        validation_status=Shipment.ValidationStatus.READY,
+        selected_service="priority_mail",
+    )
+
+    response = client.post(
+        f"/api/v1/imports/{job.id}/purchase/",
+        {"label_format": "LABEL_4X6", "agree_to_terms": True},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    shipment.refresh_from_db()
+    assert shipment.label_status == Shipment.LabelStatus.PURCHASED
+    assert shipment.label_url

@@ -65,3 +65,34 @@ def test_create_address_preset():
 
     assert response.status_code == 201
     assert SavedAddressPreset.objects.count() == initial_count + 1
+
+
+@pytest.mark.django_db
+def test_bulk_apply_saved_address():
+    client = APIClient()
+    job = ImportJob.objects.create(original_filename="test.csv")
+    preset = SavedAddressPreset.objects.create(
+        name="Warehouse",
+        contact_name="Warehouse",
+        street1="123 Main",
+        street2="",
+        city="Los Angeles",
+        state="CA",
+        postal_code="90001",
+        country="US",
+    )
+    shipment = Shipment.objects.create(import_job=job, row_number=1)
+
+    response = client.post(
+        f"/api/v1/imports/{job.id}/shipments/bulk/",
+        {
+            "shipment_ids": [str(shipment.id)],
+            "action": "apply_saved_address",
+            "payload": {"preset_id": str(preset.id)},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    shipment.refresh_from_db()
+    assert shipment.from_city == "Los Angeles"
