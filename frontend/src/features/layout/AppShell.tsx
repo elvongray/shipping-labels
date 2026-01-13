@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   CreditCard,
@@ -20,9 +21,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import ConfirmDialog from "@/features/common/ConfirmDialog";
 
 const navItems = [
   { label: "Dashboard", to: "/", icon: LayoutDashboard },
@@ -46,6 +47,7 @@ function isWizardPath(pathname: string) {
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -57,6 +59,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const importId = lastMatch?.params?.importId as string | undefined;
   const stepMeta = getStepMeta(pathname, importId);
   const sectionHeaderClass = "flex h-16 items-center justify-between px-4";
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <SidebarProvider className="min-h-screen w-full flex-col bg-muted/30">
@@ -130,9 +133,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 {stepMeta.showActions ? (
                   <div className="flex items-center gap-2">
                     {stepMeta.backTo ? (
-                      <Button asChild variant="outline">
-                        <Link to={stepMeta.backTo}>{stepMeta.backLabel}</Link>
-                      </Button>
+                      stepMeta.confirmBack ? (
+                        <Button
+                          variant="outline"
+                          onClick={() => setConfirmOpen(true)}
+                        >
+                          {stepMeta.backLabel}
+                        </Button>
+                      ) : (
+                        <Button asChild variant="outline">
+                          <Link to={stepMeta.backTo}>{stepMeta.backLabel}</Link>
+                        </Button>
+                      )
                     ) : (
                       <Button variant="outline" disabled>
                         {stepMeta.backLabel}
@@ -153,6 +165,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         </SidebarInset>
       </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Leave this review?"
+        description="Going back will discard any unsaved edits for this import."
+        confirmLabel="Go back to upload"
+        cancelLabel="Stay here"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          navigate({ to: "/upload" });
+        }}
+      />
     </SidebarProvider>
   );
 }
@@ -175,6 +199,7 @@ function getStepMeta(pathname: string, importId?: string) {
       nextLabel: "Continue",
       backTo: "/upload",
       nextTo: importId ? `/shipping/${importId}` : undefined,
+      confirmBack: true,
     };
   }
 

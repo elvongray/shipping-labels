@@ -21,12 +21,15 @@ export default function ReviewPage() {
   const importQuery = useQuery({
     queryKey: ["importJob", importId],
     queryFn: () => getImport(importId),
-    refetchInterval: (data) => {
+    enabled: !!importId,
+    refetchInterval: (query) => {
+      const data = query.state.data as any;
       if (!data) return 1500;
-      return data.status === "PENDING" || data.status === "PROCESSING"
-        ? 1500
-        : false;
+
+      const status = String(data.status ?? "").toUpperCase();
+      return status === "PENDING" || status === "PROCESSING" ? 1500 : false;
     },
+    refetchIntervalInBackground: true,
   });
 
   const error =
@@ -152,7 +155,9 @@ export default function ReviewPage() {
                     <TableRow key={shipment.id}>
                       <TableCell />
                       <TableCell>
-                        {shipment.external_order_number ?? "—"}
+                        {shipment.external_order_number?.trim()
+                          ? shipment.external_order_number
+                          : "—"}
                       </TableCell>
                       <TableCell>—</TableCell>
                       <TableCell>—</TableCell>
