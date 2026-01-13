@@ -157,6 +157,7 @@ configure_structlog(DEBUG)
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
