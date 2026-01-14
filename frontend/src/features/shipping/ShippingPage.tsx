@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
+  bulkShipments,
   getImport,
   listShipments,
   patchShipment,
@@ -12,6 +13,7 @@ import { ApiClientError } from "@/api/errors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { useSelectionStore } from "@/stores/selection.store";
 
 type QuoteItem = {
   service: string;
@@ -113,6 +116,65 @@ export default function ShippingPage() {
     return sum + (shipment.selected_service_price_cents ?? 0);
   }, 0);
 
+  const selectedIds = useSelectionStore((state) => state.selectedIds);
+  const toggle = useSelectionStore((state) => state.toggle);
+  const clear = useSelectionStore((state) => state.clear);
+  const setMany = useSelectionStore((state) => state.setMany);
+  const [bulkService, setBulkService] = useState("");
+  const visibleIds = readyShipments.map((shipment) => shipment.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds[id]);
+  const someVisibleSelected =
+    visibleIds.some((id) => selectedIds[id]) && !allVisibleSelected;
+  const selectedIdsArray = Object.keys(selectedIds);
+
+  useEffect(() => {
+    clear();
+  }, [importId, clear]);
+
+  const bulkMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      bulkShipments(importId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipments", importId] });
+      toast.success("Bulk update applied");
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Bulk update failed");
+    },
+  });
+
+  const cheapestByShipment = useMemo(() => {
+    const entries = readyShipments.map((shipment) => {
+      const quotes = quotesByShipment.get(shipment.id) ?? [];
+      const cheapest = quotes.reduce<QuoteItem | null>((acc, quote) => {
+        if (!acc || quote.price_cents < acc.price_cents) return quote;
+        return acc;
+      }, null);
+      return { shipment, cheapest };
+    });
+    return entries;
+  }, [readyShipments, quotesByShipment]);
+
+  const availableServices = useMemo(() => {
+    const idsToScan =
+      selectedIdsArray.length > 0 ? selectedIdsArray : visibleIds;
+    const services = new Map<string, QuoteItem>();
+    idsToScan.forEach((id) => {
+      const quotes = quotesByShipment.get(id) ?? [];
+      quotes.forEach((quote) => {
+        if (!services.has(quote.service)) {
+          services.set(quote.service, quote);
+        }
+      });
+    });
+    return Array.from(services.values());
+  }, [selectedIdsArray, visibleIds, quotesByShipment]);
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -149,11 +211,133 @@ export default function ShippingPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4 min-w-0">
+          {selectedIdsArray.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <div>{selectedIdsArray.length} selected</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={bulkService}
+                  onValueChange={setBulkService}
+                  disabled={availableServices.length === 0}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Set service" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableServices.map((quote) => (
+                      <SelectItem key={quote.service} value={quote.service}>
+                        {quote.name} • ${(quote.price_cents / 100).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  disabled={
+                    bulkMutation.isPending ||
+                    selectedIdsArray.length === 0 ||
+                    !bulkService
+                  }
+                  onClick={() => {
+                    const serviceQuote = availableServices.find(
+                      (quote) => quote.service === bulkService,
+                    );
+                    if (!serviceQuote) {
+                      toast.error("Select a valid service");
+                      return;
+                    }
+                    bulkMutation.mutate({
+                      action: "set_shipping_service",
+                      shipment_ids: selectedIdsArray,
+                      payload: {
+                        service: bulkService,
+                        price_cents: serviceQuote.price_cents,
+                      },
+                    });
+                  }}
+                >
+                  Set service
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={bulkMutation.isPending}
+                  onClick={() => {
+                    const selection = readyShipments.filter(
+                      (shipment) => selectedIds[shipment.id],
+                    );
+                    const cheapestSelections = selection
+                      .map((shipment) => {
+                        const quotes = quotesByShipment.get(shipment.id) ?? [];
+                        const cheapest = quotes.reduce<QuoteItem | null>(
+                          (acc, quote) => {
+                            if (!acc || quote.price_cents < acc.price_cents) {
+                              return quote;
+                            }
+                            return acc;
+                          },
+                          null,
+                        );
+                        return cheapest
+                          ? { shipmentId: shipment.id, quote: cheapest }
+                          : null;
+                      })
+                      .filter(Boolean) as Array<{
+                      shipmentId: string;
+                      quote: QuoteItem;
+                    }>;
+
+                    const grouped = cheapestSelections.reduce<
+                      Record<string, { price: number; ids: string[] }>
+                    >((acc, entry) => {
+                      const key = entry.quote.service;
+                      if (!acc[key]) {
+                        acc[key] = { price: entry.quote.price_cents, ids: [] };
+                      }
+                      acc[key].ids.push(entry.shipmentId);
+                      return acc;
+                    }, {});
+
+                    Object.entries(grouped).forEach(([service, data]) => {
+                      bulkMutation.mutate({
+                        action: "set_shipping_service",
+                        shipment_ids: data.ids,
+                        payload: {
+                          service,
+                          price_cents: data.price,
+                        },
+                      });
+                    });
+                  }}
+                >
+                  Cheapest available
+                </Button>
+                <Button variant="ghost" onClick={clear}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-lg border">
             <div className="w-full min-w-0 max-w-full overflow-x-auto">
               <Table className="min-w-[900px]">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : someVisibleSelected
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={(checked) => {
+                          const shouldSelect = checked === true;
+                          setMany(visibleIds, shouldSelect);
+                        }}
+                        aria-label="Select all shipments"
+                      />
+                    </TableHead>
                     <TableHead>Order #</TableHead>
                     <TableHead>Ship From</TableHead>
                     <TableHead>Ship To</TableHead>
@@ -166,7 +350,7 @@ export default function ShippingPage() {
                   {shipmentsQuery.isLoading ? (
                     Array.from({ length: 4 }).map((_, index) => (
                       <TableRow key={`skeleton-${index}`}>
-                        {Array.from({ length: 6 }).map((__, cellIndex) => (
+                        {Array.from({ length: 7 }).map((__, cellIndex) => (
                           <TableCell
                             key={`skeleton-cell-${index}-${cellIndex}`}
                           >
@@ -178,7 +362,7 @@ export default function ShippingPage() {
                   ) : readyShipments.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
                         No ready shipments yet.
@@ -190,6 +374,13 @@ export default function ShippingPage() {
                       const selected = shipment.selected_service ?? "";
                       return (
                         <TableRow key={shipment.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={Boolean(selectedIds[shipment.id])}
+                              onCheckedChange={() => toggle(shipment.id)}
+                              aria-label={`Select shipment ${shipment.id}`}
+                            />
+                          </TableCell>
                           <TableCell>
                             {shipment.external_order_number?.trim() || "—"}
                           </TableCell>
