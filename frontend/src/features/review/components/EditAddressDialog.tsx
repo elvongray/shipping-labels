@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 import type { Shipment } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,15 +78,22 @@ export default function EditAddressDialog({
   onSave,
   isSaving,
 }: EditAddressDialogProps) {
-  const [values, setValues] = useState<AddressFormValues>(emptyValues);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitted },
+  } = useForm<AddressFormValues>({
+    defaultValues: emptyValues,
+  });
 
   useEffect(() => {
     if (!open) return;
-    setValues(readAddressValues(shipment, addressType));
-  }, [open, shipment, addressType]);
+    reset(readAddressValues(shipment, addressType));
+  }, [open, shipment, addressType, reset]);
 
-  const handleChange = (field: keyof AddressFormValues, value: string) => {
-    setValues((prev) => ({ ...prev, [field]: value }));
+  const onSubmit = (values: AddressFormValues) => {
+    onSave(values, addressType);
   };
 
   return (
@@ -97,7 +105,7 @@ export default function EditAddressDialog({
             Update the ship from or ship to address for this shipment.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <div className="space-y-2">
             <Label>Address type</Label>
             <Select
@@ -117,92 +125,117 @@ export default function EditAddressDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="address-name">Name</Label>
+              <Label htmlFor="address-name">
+                Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-name"
-                value={values.name}
-                onChange={(event) => handleChange("name", event.target.value)}
+                aria-invalid={Boolean(errors.name)}
+                {...register("name", { required: "Name is required" })}
               />
+              {isSubmitted && errors.name ? (
+                <p className="text-xs text-destructive">
+                  {errors.name.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="address-company">Company</Label>
-              <Input
-                id="address-company"
-                value={values.company}
-                onChange={(event) =>
-                  handleChange("company", event.target.value)
-                }
-              />
+              <Input id="address-company" {...register("company")} />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="address-street1">Street address</Label>
+              <Label htmlFor="address-street1">
+                Street address <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-street1"
-                value={values.street1}
-                onChange={(event) =>
-                  handleChange("street1", event.target.value)
-                }
+                aria-invalid={Boolean(errors.street1)}
+                {...register("street1", {
+                  required: "Street address is required",
+                })}
               />
+              {isSubmitted && errors.street1 ? (
+                <p className="text-xs text-destructive">
+                  {errors.street1.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="address-street2">Street address line 2</Label>
-              <Input
-                id="address-street2"
-                value={values.street2}
-                onChange={(event) =>
-                  handleChange("street2", event.target.value)
-                }
-              />
+              <Input id="address-street2" {...register("street2")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="address-city">City</Label>
+              <Label htmlFor="address-city">
+                City <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-city"
-                value={values.city}
-                onChange={(event) => handleChange("city", event.target.value)}
+                aria-invalid={Boolean(errors.city)}
+                {...register("city", { required: "City is required" })}
               />
+              {isSubmitted && errors.city ? (
+                <p className="text-xs text-destructive">
+                  {errors.city.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="address-state">State</Label>
+              <Label htmlFor="address-state">
+                State <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-state"
-                value={values.state}
-                onChange={(event) => handleChange("state", event.target.value)}
+                aria-invalid={Boolean(errors.state)}
+                {...register("state", { required: "State is required" })}
               />
+              {isSubmitted && errors.state ? (
+                <p className="text-xs text-destructive">
+                  {errors.state.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="address-postal">Postal code</Label>
+              <Label htmlFor="address-postal">
+                Postal code <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-postal"
-                value={values.postal_code}
-                onChange={(event) =>
-                  handleChange("postal_code", event.target.value)
-                }
+                aria-invalid={Boolean(errors.postal_code)}
+                {...register("postal_code", {
+                  required: "Postal code is required",
+                })}
               />
+              {isSubmitted && errors.postal_code ? (
+                <p className="text-xs text-destructive">
+                  {errors.postal_code.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="address-country">Country</Label>
+              <Label htmlFor="address-country">
+                Country <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="address-country"
-                value={values.country}
-                onChange={(event) =>
-                  handleChange("country", event.target.value)
-                }
+                aria-invalid={Boolean(errors.country)}
+                {...register("country", { required: "Country is required" })}
               />
+              {isSubmitted && errors.country ? (
+                <p className="text-xs text-destructive">
+                  {errors.country.message}
+                </p>
+              ) : null}
             </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => onSave(values, addressType)}
-            disabled={isSaving}
-          >
-            {isSaving ? "Saving..." : "Save changes"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 import type { Shipment } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export type PackageFormValues = {
+  weight_lb: string;
   weight_oz: string;
   length_in: string;
   width_in: string;
@@ -28,6 +30,7 @@ type EditPackageDialogProps = {
 };
 
 const emptyValues: PackageFormValues = {
+  weight_lb: "",
   weight_oz: "",
   length_in: "",
   width_in: "",
@@ -36,8 +39,12 @@ const emptyValues: PackageFormValues = {
 
 function readPackageValues(shipment: Shipment | null): PackageFormValues {
   if (!shipment) return emptyValues;
+  const totalOz = shipment.weight_oz ?? null;
+  const pounds = totalOz !== null ? Math.floor(totalOz / 16) : null;
+  const ounces = totalOz !== null ? totalOz % 16 : null;
   return {
-    weight_oz: shipment.weight_oz ? String(shipment.weight_oz) : "",
+    weight_lb: pounds !== null ? String(pounds) : "",
+    weight_oz: ounces !== null ? String(ounces) : "",
     length_in: shipment.length_in ? String(shipment.length_in) : "",
     width_in: shipment.width_in ? String(shipment.width_in) : "",
     height_in: shipment.height_in ? String(shipment.height_in) : "",
@@ -51,15 +58,22 @@ export default function EditPackageDialog({
   onSave,
   isSaving,
 }: EditPackageDialogProps) {
-  const [values, setValues] = useState<PackageFormValues>(emptyValues);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitted },
+  } = useForm<PackageFormValues>({
+    defaultValues: emptyValues,
+  });
 
   useEffect(() => {
     if (!open) return;
-    setValues(readPackageValues(shipment));
-  }, [open, shipment]);
+    reset(readPackageValues(shipment));
+  }, [open, shipment, reset]);
 
-  const handleChange = (field: keyof PackageFormValues, value: string) => {
-    setValues((prev) => ({ ...prev, [field]: value }));
+  const onSubmit = (values: PackageFormValues) => {
+    onSave(values);
   };
 
   return (
@@ -71,58 +85,99 @@ export default function EditPackageDialog({
             Update the package weight and dimensions.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <form
+          className="grid gap-4 sm:grid-cols-2"
+          onSubmit={handleSubmit(onSubmit)}
+        >
           <div className="space-y-2">
-            <Label htmlFor="package-weight">Weight (oz)</Label>
+            <Label htmlFor="package-weight-lb">
+              Weight (lb) <span className="text-destructive">*</span>
+            </Label>
             <Input
-              id="package-weight"
+              id="package-weight-lb"
               inputMode="decimal"
-              value={values.weight_oz}
-              onChange={(event) =>
-                handleChange("weight_oz", event.target.value)
-              }
+              aria-invalid={Boolean(errors.weight_lb)}
+              {...register("weight_lb", { required: "Weight is required" })}
             />
+            {isSubmitted && errors.weight_lb ? (
+              <p className="text-xs text-destructive">
+                {errors.weight_lb.message}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="package-length">Length (in)</Label>
+            <Label htmlFor="package-weight-oz">
+              Weight (oz) <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="package-weight-oz"
+              inputMode="decimal"
+              aria-invalid={Boolean(errors.weight_oz)}
+              {...register("weight_oz", { required: "Weight is required" })}
+            />
+            {isSubmitted && errors.weight_oz ? (
+              <p className="text-xs text-destructive">
+                {errors.weight_oz.message}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="package-length">
+              Length (in) <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="package-length"
               inputMode="decimal"
-              value={values.length_in}
-              onChange={(event) =>
-                handleChange("length_in", event.target.value)
-              }
+              aria-invalid={Boolean(errors.length_in)}
+              {...register("length_in", { required: "Length is required" })}
             />
+            {isSubmitted && errors.length_in ? (
+              <p className="text-xs text-destructive">
+                {errors.length_in.message}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="package-width">Width (in)</Label>
+            <Label htmlFor="package-width">
+              Width (in) <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="package-width"
               inputMode="decimal"
-              value={values.width_in}
-              onChange={(event) => handleChange("width_in", event.target.value)}
+              aria-invalid={Boolean(errors.width_in)}
+              {...register("width_in", { required: "Width is required" })}
             />
+            {isSubmitted && errors.width_in ? (
+              <p className="text-xs text-destructive">
+                {errors.width_in.message}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="package-height">Height (in)</Label>
+            <Label htmlFor="package-height">
+              Height (in) <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="package-height"
               inputMode="decimal"
-              value={values.height_in}
-              onChange={(event) =>
-                handleChange("height_in", event.target.value)
-              }
+              aria-invalid={Boolean(errors.height_in)}
+              {...register("height_in", { required: "Height is required" })}
             />
+            {isSubmitted && errors.height_in ? (
+              <p className="text-xs text-destructive">
+                {errors.height_in.message}
+              </p>
+            ) : null}
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={() => onSave(values)} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save changes"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="sm:col-span-2">
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

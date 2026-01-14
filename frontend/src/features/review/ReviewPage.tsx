@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { getImport, listShipments, patchShipment } from "@/api/endpoints";
+import {
+  bulkShipments,
+  deleteShipment,
+  getImport,
+  listShipments,
+  patchShipment,
+} from "@/api/endpoints";
 import type { Shipment } from "@/api/types";
 import { ApiClientError } from "@/api/errors";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +41,7 @@ import EditAddressDialog from "@/features/review/components/EditAddressDialog";
 import type { AddressFormValues } from "@/features/review/components/EditAddressDialog";
 import EditPackageDialog from "@/features/review/components/EditPackageDialog";
 import type { PackageFormValues } from "@/features/review/components/EditPackageDialog";
+import ConfirmDialog from "@/features/common/ConfirmDialog";
 
 export default function ReviewPage() {
   const { importId } = useParams({ from: "/review/$importId" });
@@ -49,6 +56,9 @@ export default function ReviewPage() {
   const [editAddressType, setEditAddressType] = useState<"from" | "to">("from");
   const [editPackageShipment, setEditPackageShipment] =
     useState<Shipment | null>(null);
+  const [updateMessage, setUpdateMessage] = useState("Shipment updated");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const toggle = useSelectionStore((state) => state.toggle);
   const clear = useSelectionStore((state) => state.clear);
@@ -194,7 +204,7 @@ export default function ReviewPage() {
     }) => patchShipment(shipmentId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shipments", importId] });
-      toast.success("Shipment updated");
+      toast.success(updateMessage);
     },
     onError: (error) => {
       if (error instanceof ApiClientError) {
@@ -205,11 +215,35 @@ export default function ReviewPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (ids: string[]) => {
+      if (ids.length === 1) {
+        return deleteShipment(ids[0]);
+      }
+      return bulkShipments(importId, { action: "delete", shipment_ids: ids });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipments", importId] });
+      toast.success("Shipments deleted");
+      clear();
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Delete failed");
+    },
+  });
+
   const handleSaveAddress = (
     values: AddressFormValues,
     type: "from" | "to",
   ) => {
     if (!editAddressShipment) return;
+    setUpdateMessage(
+      type === "from" ? "Ship-from address updated" : "Ship-to address updated",
+    );
     const prefix = type === "from" ? "from" : "to";
     const payload: Record<string, string | null> = {
       [`${prefix}_name`]: values.name || null,
@@ -233,13 +267,17 @@ export default function ReviewPage() {
 
   const handleSavePackage = (values: PackageFormValues) => {
     if (!editPackageShipment) return;
+    setUpdateMessage("Package updated");
     const parseNumber = (value: string) => {
       if (!value.trim()) return null;
       const number = Number(value);
       return Number.isFinite(number) ? number : null;
     };
+    const pounds = parseNumber(values.weight_lb) ?? 0;
+    const ounces = parseNumber(values.weight_oz) ?? 0;
+    const totalOunces = pounds * 16 + ounces;
     const payload: Partial<Shipment> = {
-      weight_oz: parseNumber(values.weight_oz),
+      weight_oz: totalOunces || null,
       length_in: parseNumber(values.length_in),
       width_in: parseNumber(values.width_in),
       height_in: parseNumber(values.height_in),
@@ -252,6 +290,11 @@ export default function ReviewPage() {
         },
       },
     );
+  };
+
+  const openDeleteConfirm = (ids: string[]) => {
+    setPendingDeleteIds(ids);
+    setConfirmDeleteOpen(true);
   };
 
   return (
@@ -349,7 +392,11 @@ export default function ReviewPage() {
                 <Button variant="outline" disabled>
                   Verify addresses
                 </Button>
-                <Button variant="destructive" disabled>
+                <Button
+                  variant="destructive"
+                  onClick={() => openDeleteConfirm(Object.keys(selectedIds))}
+                  disabled={deleteMutation.isPending}
+                >
                   Delete
                 </Button>
                 <Button variant="ghost" onClick={clear}>
@@ -381,7 +428,7 @@ export default function ReviewPage() {
                   <TableHead>Order #</TableHead>
                   <TableHead>Ship From</TableHead>
                   <TableHead>Ship To</TableHead>
-                  <TableHead>Package</TableHead>
+                  <TableHead>Package Details</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Address Check</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -491,6 +538,13 @@ export default function ReviewPage() {
                           >
                             Edit package
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openDeleteConfirm([shipment.id])}
+                          >
+                            Delete
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -569,6 +623,25 @@ export default function ReviewPage() {
         onClose={() => setEditPackageShipment(null)}
         onSave={handleSavePackage}
         isSaving={patchMutation.isPending}
+      />
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete shipments?"
+        description="This will permanently remove the selected shipments."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onCancel={() => {
+          setConfirmDeleteOpen(false);
+          setPendingDeleteIds([]);
+        }}
+        onConfirm={() => {
+          deleteMutation.mutate(pendingDeleteIds, {
+            onSettled: () => {
+              setConfirmDeleteOpen(false);
+              setPendingDeleteIds([]);
+            },
+          });
+        }}
       />
     </div>
   );

@@ -10,6 +10,25 @@ class ShipmentSerializer(serializers.ModelSerializer):
 
 
 class ShipmentUpdateSerializer(serializers.ModelSerializer):
+    from_company = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    from_street2 = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    to_company = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    to_street2 = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+
+    def validate(self, attrs):
+        for field in ("from_company", "from_street2", "to_company", "to_street2"):
+            if field in attrs and attrs[field] is None:
+                attrs[field] = ""
+        return attrs
+
     class Meta:
         model = Shipment
         fields = (
