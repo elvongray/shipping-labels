@@ -26,7 +26,6 @@ from imports.serializers import (
 from imports.tasks import (
     task_finalize_import,
     task_validate_shipments,
-    task_verify_addresses,
 )
 from shipments.models import Shipment
 
@@ -170,7 +169,7 @@ class ImportUploadView(GenericAPIView):
 
         chain(
             task_validate_shipments.si(import_job_id=str(job.id)),
-            task_verify_addresses.si(import_job_id=str(job.id)),
+            # task_verify_addresses.si(import_job_id=str(job.id)),
             task_finalize_import.si(import_job_id=str(job.id)),
         ).delay()
 
@@ -181,6 +180,13 @@ class ImportUploadView(GenericAPIView):
 class ImportJobDetailView(APIView):
     @extend_schema(responses={200: ImportJobDetailSerializer})
     def get(self, request, import_id):
+        verified_statuses = [
+            Shipment.AddressVerificationStatus.VALID,
+            Shipment.AddressVerificationStatus.CORRECTED,
+        ]
+        from_verified_or_preset = Q(shipments__from_address_is_preset=True) | Q(
+            shipments__from_address_verification_status__in=verified_statuses
+        )
         job = (
             ImportJob.objects.filter(id=import_id)
             .annotate(
@@ -208,11 +214,14 @@ class ImportJobDetailView(APIView):
                     filter=Q(
                         shipments__validation_status=Shipment.ValidationStatus.READY
                     )
-                    & ~Q(
-                        shipments__address_verification_status__in=[
-                            Shipment.AddressVerificationStatus.VALID,
-                            Shipment.AddressVerificationStatus.CORRECTED,
-                        ]
+                    & (
+                        ~Q(shipments__address_verification_status__in=verified_statuses)
+                        | (
+                            Q(shipments__from_address_is_preset=False)
+                            & ~Q(
+                                shipments__from_address_verification_status__in=verified_statuses
+                            )
+                        )
                     ),
                 ),
                 ready_with_service_count=Count(
@@ -230,12 +239,8 @@ class ImportJobDetailView(APIView):
                     )
                     & ~Q(shipments__selected_service="")
                     & Q(shipments__selected_service__isnull=False)
-                    & Q(
-                        shipments__address_verification_status__in=[
-                            Shipment.AddressVerificationStatus.VALID,
-                            Shipment.AddressVerificationStatus.CORRECTED,
-                        ]
-                    ),
+                    & Q(shipments__address_verification_status__in=verified_statuses)
+                    & from_verified_or_preset,
                 ),
             )
             .first()
@@ -278,17 +283,20 @@ class ImportPurchaseView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        verified_statuses = [
+            Shipment.AddressVerificationStatus.VALID,
+            Shipment.AddressVerificationStatus.CORRECTED,
+        ]
         eligible_shipments = (
             shipments.filter(
                 validation_status=Shipment.ValidationStatus.READY,
                 selected_service__isnull=False,
             )
             .exclude(selected_service="")
+            .filter(address_verification_status__in=verified_statuses)
             .filter(
-                address_verification_status__in=[
-                    Shipment.AddressVerificationStatus.VALID,
-                    Shipment.AddressVerificationStatus.CORRECTED,
-                ]
+                Q(from_address_is_preset=True)
+                | Q(from_address_verification_status__in=verified_statuses)
             )
         )
         if not eligible_shipments.exists():

@@ -195,6 +195,29 @@ def validate_shipment(shipment: Shipment) -> dict:
             }
         )
 
+    if (
+        shipment.from_address_verification_status
+        == Shipment.AddressVerificationStatus.INVALID
+    ):
+        errors.append(
+            {
+                "field": "from_address_verification_status",
+                "code": "address_invalid",
+                "message": "from address verification failed",
+            }
+        )
+    elif (
+        shipment.from_address_verification_status
+        == Shipment.AddressVerificationStatus.FAILED
+    ):
+        errors.append(
+            {
+                "field": "from_address_verification_status",
+                "code": "address_verification_failed",
+                "message": "from address verification unavailable; please retry",
+            }
+        )
+
     has_invalid = any(
         error["code"]
         in {

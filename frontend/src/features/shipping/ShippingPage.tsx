@@ -101,7 +101,14 @@ export default function ShippingPage() {
   const readyShipments = shipments.filter((shipment) => {
     if (shipment.validation_status !== "READY") return false;
     const addressStatus = shipment.address_verification_status;
-    return addressStatus === "VALID" || addressStatus === "CORRECTED";
+    const toVerified =
+      addressStatus === "VALID" || addressStatus === "CORRECTED";
+    const fromStatus = shipment.from_address_verification_status;
+    const fromVerified =
+      shipment.from_address_is_preset ||
+      fromStatus === "VALID" ||
+      fromStatus === "CORRECTED";
+    return toVerified && fromVerified;
   });
   const attentionCount = importQuery.data
     ? (importQuery.data.invalid_count ?? 0) +
@@ -452,7 +459,11 @@ export default function ShippingPage() {
                             />
                           </TableCell>
                           <TableCell>
-                            {shipment.external_order_number?.trim() || "—"}
+                            {shipment.external_order_number?.trim()
+                              ? shipment.external_order_number
+                              : shipment.row_number
+                                ? `${shipment.row_number}`
+                                : "—"}
                           </TableCell>
                           <TableCell className="text-sm">
                             {[

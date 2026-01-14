@@ -74,6 +74,13 @@ class Shipment(models.Model):
         default=AddressVerificationStatus.NOT_STARTED,
     )
     address_verification_details = models.JSONField(default=dict, blank=True)
+    from_address_verification_status = models.CharField(
+        max_length=20,
+        choices=AddressVerificationStatus.choices,
+        default=AddressVerificationStatus.NOT_STARTED,
+    )
+    from_address_verification_details = models.JSONField(default=dict, blank=True)
+    from_address_is_preset = models.BooleanField(default=False)
 
     selected_service = models.CharField(max_length=100, blank=True)
     selected_service_price_cents = models.IntegerField(null=True, blank=True)

@@ -39,6 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -222,6 +223,22 @@ export default function ReviewPage() {
       default:
         return "outline";
     }
+  };
+
+  const getInvalidFields = (errorsValue: unknown) => {
+    if (!errorsValue) return [];
+    if (Array.isArray(errorsValue)) {
+      return errorsValue
+        .map((item) => {
+          if (item && typeof item === "object" && "field" in item) {
+            return String((item as { field?: string }).field ?? "");
+          }
+          return "";
+        })
+        .filter(Boolean);
+    }
+    if (typeof errorsValue !== "object") return [];
+    return Object.keys(errorsValue as Record<string, unknown>);
   };
 
   const addressPresetsQuery = useQuery({
@@ -673,7 +690,6 @@ export default function ReviewPage() {
                     <TableHead>Ship To</TableHead>
                     <TableHead>Package Details</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Address Check</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -722,7 +738,9 @@ export default function ReviewPage() {
                         <TableCell>
                           {shipment.external_order_number?.trim()
                             ? shipment.external_order_number
-                            : "—"}
+                            : shipment.row_number
+                              ? `${shipment.row_number}`
+                              : "—"}
                         </TableCell>
                         <TableCell className="text-sm">
                           <div className="space-y-0.5">
@@ -734,6 +752,14 @@ export default function ReviewPage() {
                               ),
                             )}
                           </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {shipment.from_address_is_preset ||
+                            ["VALID", "CORRECTED"].includes(
+                              shipment.from_address_verification_status ?? "",
+                            )
+                              ? "Verified"
+                              : "Not verified"}
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm">
                           <div className="space-y-0.5">
@@ -744,6 +770,13 @@ export default function ReviewPage() {
                                 </div>
                               ),
                             )}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {["VALID", "CORRECTED"].includes(
+                              shipment.address_verification_status ?? "",
+                            )
+                              ? "Verified"
+                              : "Not verified"}
                           </div>
                         </TableCell>
                         <TableCell className="text-sm">
@@ -763,12 +796,17 @@ export default function ReviewPage() {
                                 Fix required
                               </span>
                             ) : null}
+                            {shipment.validation_status !== "READY" &&
+                            getInvalidFields(shipment.validation_errors)
+                              .length ? (
+                              <span className="text-xs text-muted-foreground">
+                                Missing:{" "}
+                                {getInvalidFields(shipment.validation_errors)
+                                  .slice(0, 3)
+                                  .join(", ")}
+                              </span>
+                            ) : null}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {shipment.address_verification_status ?? "—"}
-                          </Badge>
                         </TableCell>
                         <TableCell className="text-right text-sm text-muted-foreground">
                           <div className="flex justify-end">
@@ -790,6 +828,17 @@ export default function ReviewPage() {
                                   }}
                                 >
                                   Edit address
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    bulkMutation.mutate({
+                                      action: "verify_addresses",
+                                      shipment_ids: [shipment.id],
+                                    })
+                                  }
+                                  disabled={bulkMutation.isPending}
+                                >
+                                  Verify addresses
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() =>

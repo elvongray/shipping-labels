@@ -61,10 +61,24 @@ class ShipmentDetailView(RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         shipment = serializer.save()
+        if any(field.startswith("from_") for field in serializer.validated_data.keys()):
+            shipment.from_address_is_preset = False
+            shipment.from_address_verification_status = (
+                Shipment.AddressVerificationStatus.NOT_STARTED
+            )
+            shipment.from_address_verification_details = {}
         result = validate_shipment(shipment)
         shipment.validation_status = result["status"]
         shipment.validation_errors = result["errors"]
-        shipment.save(update_fields=["validation_status", "validation_errors"])
+        shipment.save(
+            update_fields=[
+                "from_address_is_preset",
+                "from_address_verification_status",
+                "from_address_verification_details",
+                "validation_status",
+                "validation_errors",
+            ]
+        )
 
 
 class ImportShipmentBulkView(APIView):
@@ -109,9 +123,19 @@ class ImportShipmentBulkView(APIView):
                     "from_state": preset.state,
                     "from_postal_code": preset.postal_code,
                     "from_country": preset.country,
+                    "from_address_is_preset": True,
+                    "from_address_verification_status": (
+                        Shipment.AddressVerificationStatus.NOT_STARTED
+                    ),
+                    "from_address_verification_details": {},
                 }
             else:
-                update_data = payload
+                update_data = dict(payload)
+                update_data["from_address_is_preset"] = False
+                update_data["from_address_verification_status"] = (
+                    Shipment.AddressVerificationStatus.NOT_STARTED
+                )
+                update_data["from_address_verification_details"] = {}
 
             for shipment in shipments:
                 for key, value in update_data.items():

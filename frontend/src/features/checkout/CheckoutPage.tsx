@@ -43,11 +43,17 @@ export default function CheckoutPage() {
   const readyWithService = readyShipments.filter(
     (shipment) => shipment.selected_service,
   );
-  const readyWithServiceAndVerified = readyWithService.filter((shipment) =>
-    ["VALID", "CORRECTED"].includes(
+  const readyWithServiceAndVerified = readyWithService.filter((shipment) => {
+    const toVerified = ["VALID", "CORRECTED"].includes(
       shipment.address_verification_status ?? "NOT_STARTED",
-    ),
-  );
+    );
+    const fromVerified =
+      shipment.from_address_is_preset ||
+      ["VALID", "CORRECTED"].includes(
+        shipment.from_address_verification_status ?? "NOT_STARTED",
+      );
+    return toVerified && fromVerified;
+  });
   const totalCents = readyWithServiceAndVerified.reduce(
     (sum, shipment) => sum + (shipment.selected_service_price_cents ?? 0),
     0,

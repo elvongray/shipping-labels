@@ -52,7 +52,7 @@ def test_verify_fallback_creates_attempts(monkeypatch):
         lambda: [_FailingProvider(), _SuccessProvider()],
     )
 
-    status, details = verify_service.verify_shipment_address(shipment)
+    status, details = verify_service.verify_shipment_address(shipment, "to")
 
     assert status == Shipment.AddressVerificationStatus.VALID
     assert details["provider"] == "secondary"

@@ -55,6 +55,9 @@ export type Shipment = {
   validation_errors?: unknown;
   address_verification_status: AddressVerificationStatus;
   address_verification_details?: unknown;
+  from_address_verification_status?: AddressVerificationStatus;
+  from_address_verification_details?: unknown;
+  from_address_is_preset?: boolean;
   selected_service?: string | null;
   selected_service_price_cents?: number | null;
   label_status?: "NOT_PURCHASED" | "PURCHASED" | "FAILED";
