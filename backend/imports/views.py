@@ -122,6 +122,18 @@ class ImportJobDetailView(APIView):
                         shipments__validation_status=Shipment.ValidationStatus.INVALID
                     ),
                 ),
+                address_unverified_count=Count(
+                    "shipments",
+                    filter=Q(
+                        shipments__validation_status=Shipment.ValidationStatus.READY
+                    )
+                    & ~Q(
+                        shipments__address_verification_status__in=[
+                            Shipment.AddressVerificationStatus.VALID,
+                            Shipment.AddressVerificationStatus.CORRECTED,
+                        ]
+                    ),
+                ),
             )
             .first()
         )

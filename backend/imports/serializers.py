@@ -20,6 +20,7 @@ class ImportJobDetailSerializer(serializers.ModelSerializer):
     ready_count = serializers.IntegerField(read_only=True)
     needs_info_count = serializers.IntegerField(read_only=True)
     invalid_count = serializers.IntegerField(read_only=True)
+    address_unverified_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = ImportJob
@@ -33,6 +34,7 @@ class ImportJobDetailSerializer(serializers.ModelSerializer):
             "ready_count",
             "needs_info_count",
             "invalid_count",
+            "address_unverified_count",
         )
 
 

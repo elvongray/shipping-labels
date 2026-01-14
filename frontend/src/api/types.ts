@@ -20,6 +20,7 @@ export type ImportJob = {
   ready_count?: number;
   invalid_count?: number;
   needs_info_count?: number;
+  address_unverified_count?: number;
 };
 
 export type Shipment = {
