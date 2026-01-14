@@ -122,8 +122,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="bg-muted/30">
-          <div className="flex min-h-full flex-col">
+        <SidebarInset className="bg-muted/30 min-w-0">
+          <div className="flex min-h-full min-w-0 flex-col">
             <div className="border-b bg-background">
               <div className={sectionHeaderClass}>
                 <div>
@@ -161,7 +161,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 ) : null}
               </div>
             </div>
-            <div className="p-6">{children}</div>
+            <div className="p-6 min-w-0">{children}</div>
           </div>
         </SidebarInset>
       </div>

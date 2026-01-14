@@ -6,6 +6,8 @@ import {
   deleteShipment,
   getImport,
   listShipments,
+  listAddressPresets,
+  listPackagePresets,
   patchShipment,
 } from "@/api/endpoints";
 import type { Shipment } from "@/api/types";
@@ -28,6 +30,12 @@ import {
 } from "@/components/ui/pagination";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -42,6 +50,8 @@ import type { AddressFormValues } from "@/features/review/components/EditAddress
 import EditPackageDialog from "@/features/review/components/EditPackageDialog";
 import type { PackageFormValues } from "@/features/review/components/EditPackageDialog";
 import ConfirmDialog from "@/features/common/ConfirmDialog";
+import ApplyPresetDialog from "@/features/review/components/ApplyPresetDialog";
+import { MoreHorizontal } from "lucide-react";
 
 export default function ReviewPage() {
   const { importId } = useParams({ from: "/review/$importId" });
@@ -59,6 +69,8 @@ export default function ReviewPage() {
   const [updateMessage, setUpdateMessage] = useState("Shipment updated");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const [addressPresetOpen, setAddressPresetOpen] = useState(false);
+  const [packagePresetOpen, setPackagePresetOpen] = useState(false);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const toggle = useSelectionStore((state) => state.toggle);
   const clear = useSelectionStore((state) => state.clear);
@@ -194,6 +206,16 @@ export default function ReviewPage() {
     }
   };
 
+  const addressPresetsQuery = useQuery({
+    queryKey: ["addressPresets"],
+    queryFn: listAddressPresets,
+  });
+
+  const packagePresetsQuery = useQuery({
+    queryKey: ["packagePresets"],
+    queryFn: listPackagePresets,
+  });
+
   const patchMutation = useMutation({
     mutationFn: ({
       shipmentId,
@@ -233,6 +255,22 @@ export default function ReviewPage() {
         return;
       }
       toast.error("Delete failed");
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      bulkShipments(importId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipments", importId] });
+      toast.success("Bulk action applied");
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Bulk action failed");
     },
   });
 
@@ -297,6 +335,11 @@ export default function ReviewPage() {
     setConfirmDeleteOpen(true);
   };
 
+  const selectedIdsArray = useMemo(
+    () => Object.keys(selectedIds),
+    [selectedIds],
+  );
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold">Review & Edit</h1>
@@ -316,7 +359,7 @@ export default function ReviewPage() {
             <Badge variant="outline">{importJob.status}</Badge>
           ) : null}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 min-w-0">
           {importQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">Loading status…</div>
           ) : error ? (
@@ -383,13 +426,32 @@ export default function ReviewPage() {
                 {shipmentsQuery.isFetching ? " • Updating…" : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" disabled>
+                <Button
+                  variant="outline"
+                  onClick={() => setAddressPresetOpen(true)}
+                  disabled={selectedIdsArray.length === 0}
+                >
                   Apply address preset
                 </Button>
-                <Button variant="outline" disabled>
+                <Button
+                  variant="outline"
+                  onClick={() => setPackagePresetOpen(true)}
+                  disabled={selectedIdsArray.length === 0}
+                >
                   Apply package preset
                 </Button>
-                <Button variant="outline" disabled>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    bulkMutation.mutate({
+                      action: "verify_addresses",
+                      shipment_ids: selectedIdsArray,
+                    })
+                  }
+                  disabled={
+                    selectedIdsArray.length === 0 || bulkMutation.isPending
+                  }
+                >
                   Verify addresses
                 </Button>
                 <Button
@@ -406,152 +468,174 @@ export default function ReviewPage() {
             </div>
           ) : null}
           <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={
-                        allVisibleSelected
-                          ? true
-                          : someVisibleSelected
-                            ? "indeterminate"
-                            : false
-                      }
-                      onCheckedChange={(checked) => {
-                        const shouldSelect = checked === true;
-                        setMany(visibleIds, shouldSelect);
-                      }}
-                      aria-label="Select all shipments"
-                    />
-                  </TableHead>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Ship From</TableHead>
-                  <TableHead>Ship To</TableHead>
-                  <TableHead>Package Details</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Address Check</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shipmentsQuery.isLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <TableRow key={`skeleton-${index}`}>
-                      {Array.from({ length: 8 }).map((__, cellIndex) => (
-                        <TableCell key={`skeleton-cell-${index}-${cellIndex}`}>
-                          <Skeleton className="h-4 w-full" />
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : shipments.length === 0 ? (
+            <div className="w-full min-w-0 max-w-full overflow-x-auto">
+              <Table className="min-w-[1100px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="py-8 text-center text-sm text-muted-foreground"
-                    >
-                      No shipments yet. Upload a CSV to begin processing.
-                    </TableCell>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={
+                          allVisibleSelected
+                            ? true
+                            : someVisibleSelected
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={(checked) => {
+                          const shouldSelect = checked === true;
+                          setMany(visibleIds, shouldSelect);
+                        }}
+                        aria-label="Select all shipments"
+                      />
+                    </TableHead>
+                    <TableHead>Order #</TableHead>
+                    <TableHead>Ship From</TableHead>
+                    <TableHead>Ship To</TableHead>
+                    <TableHead>Package Details</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Address Check</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  shipments.map((shipment) => (
-                    <TableRow
-                      key={shipment.id}
-                      className={
-                        shipment.validation_status === "READY"
-                          ? "bg-primary/5"
-                          : shipment.validation_status === "INVALID" ||
-                              shipment.validation_status === "NEEDS_INFO"
-                            ? "bg-destructive/5"
-                            : undefined
-                      }
-                    >
-                      <TableCell>
-                        <Checkbox
-                          checked={Boolean(selectedIds[shipment.id])}
-                          onCheckedChange={() => toggle(shipment.id)}
-                          aria-label={`Select shipment ${shipment.id}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {shipment.external_order_number?.trim()
-                          ? shipment.external_order_number
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div className="space-y-0.5">
-                          {formatAddress("from", shipment).map(
-                            (line, index) => (
-                              <div key={`from-${shipment.id}-${index}`}>
-                                {line}
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div className="space-y-0.5">
-                          {formatAddress("to", shipment).map((line, index) => (
-                            <div key={`to-${shipment.id}-${index}`}>{line}</div>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatPackage(shipment)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge
-                            variant={statusVariant(shipment.validation_status)}
+                </TableHeader>
+                <TableBody>
+                  {shipmentsQuery.isLoading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        {Array.from({ length: 8 }).map((__, cellIndex) => (
+                          <TableCell
+                            key={`skeleton-cell-${index}-${cellIndex}`}
                           >
-                            {shipment.validation_status}
-                          </Badge>
-                          {shipment.validation_status !== "READY" ? (
-                            <span className="text-xs text-muted-foreground">
-                              Fix required
-                            </span>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {shipment.address_verification_status ?? "—"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditAddressShipment(shipment);
-                              setEditAddressType("from");
-                            }}
-                          >
-                            Edit address
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditPackageShipment(shipment)}
-                          >
-                            Edit package
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openDeleteConfirm([shipment.id])}
-                          >
-                            Delete
-                          </Button>
-                        </div>
+                            <Skeleton className="h-4 w-full" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : shipments.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={8}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No shipments yet. Upload a CSV to begin processing.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    shipments.map((shipment) => (
+                      <TableRow
+                        key={shipment.id}
+                        className={
+                          shipment.validation_status === "READY"
+                            ? "bg-primary/5"
+                            : shipment.validation_status === "INVALID" ||
+                                shipment.validation_status === "NEEDS_INFO"
+                              ? "bg-destructive/5"
+                              : undefined
+                        }
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={Boolean(selectedIds[shipment.id])}
+                            onCheckedChange={() => toggle(shipment.id)}
+                            aria-label={`Select shipment ${shipment.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {shipment.external_order_number?.trim()
+                            ? shipment.external_order_number
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="space-y-0.5">
+                            {formatAddress("from", shipment).map(
+                              (line, index) => (
+                                <div key={`from-${shipment.id}-${index}`}>
+                                  {line}
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="space-y-0.5">
+                            {formatAddress("to", shipment).map(
+                              (line, index) => (
+                                <div key={`to-${shipment.id}-${index}`}>
+                                  {line}
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatPackage(shipment)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={statusVariant(
+                                shipment.validation_status,
+                              )}
+                            >
+                              {shipment.validation_status}
+                            </Badge>
+                            {shipment.validation_status !== "READY" ? (
+                              <span className="text-xs text-muted-foreground">
+                                Fix required
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {shipment.address_verification_status ?? "—"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label="Actions"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setEditAddressShipment(shipment);
+                                    setEditAddressType("from");
+                                  }}
+                                >
+                                  Edit address
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setEditPackageShipment(shipment)
+                                  }
+                                >
+                                  Edit package
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() =>
+                                    openDeleteConfirm([shipment.id])
+                                  }
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
           <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -642,6 +726,66 @@ export default function ReviewPage() {
             },
           });
         }}
+      />
+      <ApplyPresetDialog
+        open={addressPresetOpen}
+        title="Apply address preset"
+        description="Choose a ship-from preset to apply to selected shipments."
+        presets={(addressPresetsQuery.data ?? []).map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          subtitle: [
+            [preset.street1, preset.street2].filter(Boolean).join(" "),
+            [preset.city, preset.state, preset.postal_code]
+              .filter(Boolean)
+              .join(" "),
+            preset.country,
+          ]
+            .filter(Boolean)
+            .join(" • "),
+        }))}
+        onClose={() => setAddressPresetOpen(false)}
+        onApply={(presetId) => {
+          bulkMutation.mutate(
+            {
+              action: "apply_saved_address",
+              shipment_ids: selectedIdsArray,
+              payload: { preset_id: presetId },
+            },
+            {
+              onSuccess: () => {
+                setAddressPresetOpen(false);
+              },
+            },
+          );
+        }}
+        isLoading={bulkMutation.isPending}
+      />
+      <ApplyPresetDialog
+        open={packagePresetOpen}
+        title="Apply package preset"
+        description="Choose a saved package to apply to selected shipments."
+        presets={(packagePresetsQuery.data ?? []).map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          subtitle: `${preset.weight_oz} oz • ${preset.length_in}x${preset.width_in}x${preset.height_in} in`,
+        }))}
+        onClose={() => setPackagePresetOpen(false)}
+        onApply={(presetId) => {
+          bulkMutation.mutate(
+            {
+              action: "apply_saved_package",
+              shipment_ids: selectedIdsArray,
+              payload: { preset_id: presetId },
+            },
+            {
+              onSuccess: () => {
+                setPackagePresetOpen(false);
+              },
+            },
+          );
+        }}
+        isLoading={bulkMutation.isPending}
       />
     </div>
   );

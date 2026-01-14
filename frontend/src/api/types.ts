@@ -61,14 +61,13 @@ export type Shipment = {
 export type PresetAddress = {
   id: string;
   name: string;
-  from_name?: string | null;
-  from_company?: string | null;
-  from_street1: string;
-  from_street2?: string | null;
-  from_city: string;
-  from_state: string;
-  from_postal_code: string;
-  from_country?: string | null;
+  company?: string | null;
+  street1: string;
+  street2?: string | null;
+  city: string;
+  state: string;
+  postal_code: string;
+  country?: string | null;
 };
 
 export type PresetPackage = {
