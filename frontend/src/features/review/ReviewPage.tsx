@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import {
   bulkShipments,
+  createAddressPreset,
+  createPackagePreset,
   deleteShipment,
   getImport,
   listShipments,
@@ -52,6 +54,10 @@ import type { PackageFormValues } from "@/features/review/components/EditPackage
 import ConfirmDialog from "@/features/common/ConfirmDialog";
 import ApplyPresetDialog from "@/features/review/components/ApplyPresetDialog";
 import { MoreHorizontal } from "lucide-react";
+import CreateAddressPresetDialog from "@/features/review/components/CreateAddressPresetDialog";
+import type { AddressPresetFormValues } from "@/features/review/components/CreateAddressPresetDialog";
+import CreatePackagePresetDialog from "@/features/review/components/CreatePackagePresetDialog";
+import type { PackagePresetFormValues } from "@/features/review/components/CreatePackagePresetDialog";
 
 export default function ReviewPage() {
   const { importId } = useParams({ from: "/review/$importId" });
@@ -71,6 +77,8 @@ export default function ReviewPage() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   const [addressPresetOpen, setAddressPresetOpen] = useState(false);
   const [packagePresetOpen, setPackagePresetOpen] = useState(false);
+  const [createAddressOpen, setCreateAddressOpen] = useState(false);
+  const [createPackageOpen, setCreatePackageOpen] = useState(false);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const toggle = useSelectionStore((state) => state.toggle);
   const clear = useSelectionStore((state) => state.clear);
@@ -274,6 +282,53 @@ export default function ReviewPage() {
     },
   });
 
+  const createAddressPresetMutation = useMutation({
+    mutationFn: (payload: AddressPresetFormValues) =>
+      createAddressPreset(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["addressPresets"] });
+      toast.success("Address preset created");
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Failed to create address preset");
+    },
+  });
+
+  const createPackagePresetMutation = useMutation({
+    mutationFn: (payload: PackagePresetFormValues) => {
+      const parseNumber = (value: string) => {
+        if (!value.trim()) return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      };
+      const pounds = parseNumber(payload.weight_lb) ?? 0;
+      const ounces = parseNumber(payload.weight_oz) ?? 0;
+      const totalOunces = pounds * 16 + ounces;
+      return createPackagePreset({
+        name: payload.name,
+        weight_oz: totalOunces,
+        length_in: parseNumber(payload.length_in),
+        width_in: parseNumber(payload.width_in),
+        height_in: parseNumber(payload.height_in),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["packagePresets"] });
+      toast.success("Package preset created");
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Failed to create package preset");
+    },
+  });
+
   const handleSaveAddress = (
     values: AddressFormValues,
     type: "from" | "to",
@@ -345,7 +400,7 @@ export default function ReviewPage() {
       <h1 className="text-2xl font-semibold">Review & Edit</h1>
       <p className="mt-2 text-sm text-muted-foreground">Import: {importId}</p>
 
-      <Card className="mt-6">
+      <Card className="mt-6 w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Import status</CardTitle>
@@ -394,7 +449,107 @@ export default function ReviewPage() {
         </CardContent>
       </Card>
 
-      <Card className="mt-6">
+      <Card className="mt-6 w-full max-w-full">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Saved presets</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Create reusable address and package presets for bulk actions.
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Addresses</h3>
+              <Button size="sm" onClick={() => setCreateAddressOpen(true)}>
+                New address preset
+              </Button>
+            </div>
+            {addressPresetsQuery.isLoading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    {addressPresetsQuery.data?.length
+                      ? "View address presets"
+                      : "No address presets yet"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[340px]">
+                  {(addressPresetsQuery.data ?? []).length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      No address presets
+                    </DropdownMenuItem>
+                  ) : (
+                    (addressPresetsQuery.data ?? []).map((preset) => (
+                      <DropdownMenuItem key={preset.id} disabled>
+                        <div className="flex flex-col items-start">
+                          <span>{preset.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {[preset.street1, preset.street2]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {[preset.city, preset.state, preset.postal_code]
+                              .filter(Boolean)
+                              .join(" ")}
+                            {preset.country ? ` • ${preset.country}` : ""}
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Packages</h3>
+              <Button size="sm" onClick={() => setCreatePackageOpen(true)}>
+                New package preset
+              </Button>
+            </div>
+            {packagePresetsQuery.isLoading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    {packagePresetsQuery.data?.length
+                      ? "View package presets"
+                      : "No package presets yet"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[340px]">
+                  {(packagePresetsQuery.data ?? []).length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      No package presets
+                    </DropdownMenuItem>
+                  ) : (
+                    (packagePresetsQuery.data ?? []).map((preset) => (
+                      <DropdownMenuItem key={preset.id} disabled>
+                        <div className="flex flex-col items-start">
+                          <span>{preset.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {preset.weight_oz} oz • {preset.length_in}x
+                            {preset.width_in}x{preset.height_in} in
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6 w-full max-w-full">
         <CardHeader>
           <CardTitle>Shipments</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -786,6 +941,26 @@ export default function ReviewPage() {
           );
         }}
         isLoading={bulkMutation.isPending}
+      />
+      <CreateAddressPresetDialog
+        open={createAddressOpen}
+        onClose={() => setCreateAddressOpen(false)}
+        onSave={(values) => {
+          createAddressPresetMutation.mutate(values, {
+            onSuccess: () => setCreateAddressOpen(false),
+          });
+        }}
+        isSaving={createAddressPresetMutation.isPending}
+      />
+      <CreatePackagePresetDialog
+        open={createPackageOpen}
+        onClose={() => setCreatePackageOpen(false)}
+        onSave={(values) => {
+          createPackagePresetMutation.mutate(values, {
+            onSuccess: () => setCreatePackageOpen(false),
+          });
+        }}
+        isSaving={createPackagePresetMutation.isPending}
       />
     </div>
   );

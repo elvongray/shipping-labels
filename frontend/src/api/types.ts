@@ -61,6 +61,7 @@ export type Shipment = {
 export type PresetAddress = {
   id: string;
   name: string;
+  contact_name?: string | null;
   company?: string | null;
   street1: string;
   street2?: string | null;
