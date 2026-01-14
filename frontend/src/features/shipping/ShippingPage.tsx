@@ -184,7 +184,7 @@ export default function ShippingPage() {
 
       {attentionCount > 0 ? (
         <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-destructive">
               {attentionCount} shipment(s) need fixes before purchase.
             </div>
