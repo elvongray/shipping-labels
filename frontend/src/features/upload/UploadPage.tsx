@@ -114,12 +114,6 @@ export default function UploadPage() {
                 "Start upload"
               )}
             </Button>
-            <a
-              className="text-sm font-medium text-primary hover:text-primary/80"
-              href="/template.csv"
-            >
-              Download CSV template
-            </a>
           </div>
 
           {errorMessage ? (
