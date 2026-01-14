@@ -1,9 +1,12 @@
+import csv
 import uuid
+from pathlib import Path
 
 import structlog
 from celery import chain
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -20,14 +23,79 @@ from imports.serializers import (
     ImportPurchaseResponseSerializer,
     ImportUploadSerializer,
 )
-from imports.tasks import (
-    task_finalize_import,
-    task_parse_csv,
-    task_validate_shipments,
-)
+from imports.tasks import task_finalize_import, task_validate_shipments
 from shipments.models import Shipment
 
 logger = structlog.get_logger(__name__)
+
+
+def _parse_csv(job: ImportJob) -> str | None:
+    stored_path = job.meta.get("stored_path")
+    if not stored_path:
+        return "CSV file not found."
+
+    csv_path = Path(settings.MEDIA_ROOT) / stored_path
+    if not csv_path.exists():
+        return "CSV file not found."
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        rows = list(reader)
+
+    if len(rows) < 3:
+        return "CSV file is missing data rows."
+
+    data_rows = rows[2:]
+    shipments = []
+    for index, row in enumerate(data_rows, start=3):
+        row = row + [""] * (23 - len(row))
+        from_name = " ".join([row[0], row[1]]).strip()
+        to_name = " ".join([row[7], row[8]]).strip()
+
+        try:
+            lbs = float(row[14] or 0)
+            oz = float(row[15] or 0)
+        except ValueError:
+            lbs = 0
+            oz = 0
+
+        weight_oz = (lbs * 16) + oz if lbs or oz else None
+
+        shipments.append(
+            Shipment(
+                import_job=job,
+                row_number=index,
+                external_order_number=row[21],
+                sku=row[22],
+                from_name=from_name,
+                from_street1=row[2],
+                from_street2=row[3],
+                from_city=row[4],
+                from_postal_code=row[5],
+                from_state=row[6],
+                from_country="US",
+                to_name=to_name,
+                to_street1=row[9],
+                to_street2=row[10],
+                to_city=row[11],
+                to_postal_code=row[12],
+                to_state=row[13],
+                to_country="US",
+                weight_oz=weight_oz,
+                length_in=row[16] or None,
+                width_in=row[17] or None,
+                height_in=row[18] or None,
+            )
+        )
+
+    with transaction.atomic():
+        Shipment.objects.filter(import_job=job).delete()
+        Shipment.objects.bulk_create(shipments)
+        job.progress_total = len(shipments)
+        job.progress_done = 0
+        job.save(update_fields=["progress_total", "progress_done"])
+
+    return None
 
 
 class ImportUploadView(GenericAPIView):
@@ -86,8 +154,17 @@ class ImportUploadView(GenericAPIView):
 
         logger.info("import.upload.received", import_job_id=str(job.id))
 
+        parse_error = _parse_csv(job)
+        if parse_error:
+            job.status = ImportJob.Status.FAILED
+            job.error_summary = parse_error
+            job.save(update_fields=["status", "error_summary"])
+            return Response(
+                {"error": {"code": "INVALID_FILE", "message": parse_error}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         chain(
-            task_parse_csv.si(import_job_id=str(job.id)),
             task_validate_shipments.si(import_job_id=str(job.id)),
             # task_verify_addresses.si(import_job_id=str(job.id)),
             task_finalize_import.si(import_job_id=str(job.id)),
