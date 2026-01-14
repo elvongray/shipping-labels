@@ -27,7 +27,7 @@ services:
           property: connectionString
 
   - type: web
-    plan: free
+    plan: starter
     name: shipping_labels
     runtime: python
     rootDir: backend
