@@ -23,7 +23,11 @@ from imports.serializers import (
     ImportPurchaseResponseSerializer,
     ImportUploadSerializer,
 )
-from imports.tasks import task_finalize_import, task_validate_shipments
+from imports.tasks import (
+    task_finalize_import,
+    task_validate_shipments,
+    task_verify_addresses,
+)
 from shipments.models import Shipment
 
 logger = structlog.get_logger(__name__)
@@ -166,7 +170,7 @@ class ImportUploadView(GenericAPIView):
 
         chain(
             task_validate_shipments.si(import_job_id=str(job.id)),
-            # task_verify_addresses.si(import_job_id=str(job.id)),
+            task_verify_addresses.si(import_job_id=str(job.id)),
             task_finalize_import.si(import_job_id=str(job.id)),
         ).delay()
 
