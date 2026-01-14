@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useSelectionStore } from "@/stores/selection.store";
+import { useWizardStore } from "@/stores/wizard.store";
 
 type QuoteItem = {
   service: string;
@@ -97,9 +98,11 @@ export default function ShippingPage() {
   });
 
   const shipments = shipmentsQuery.data?.results ?? [];
-  const readyShipments = shipments.filter(
-    (shipment) => shipment.validation_status === "READY",
-  );
+  const readyShipments = shipments.filter((shipment) => {
+    if (shipment.validation_status !== "READY") return false;
+    const addressStatus = shipment.address_verification_status;
+    return addressStatus === "VALID" || addressStatus === "CORRECTED";
+  });
   const attentionCount = importQuery.data
     ? (importQuery.data.invalid_count ?? 0) +
       (importQuery.data.needs_info_count ?? 0) +
@@ -121,6 +124,9 @@ export default function ShippingPage() {
   const toggle = useSelectionStore((state) => state.toggle);
   const clear = useSelectionStore((state) => state.clear);
   const setMany = useSelectionStore((state) => state.setMany);
+  const setCanProceedToCheckout = useWizardStore(
+    (state) => state.setCanProceedToCheckout,
+  );
   const [bulkService, setBulkService] = useState("");
   const visibleIds = readyShipments.map((shipment) => shipment.id);
   const allVisibleSelected =
@@ -132,6 +138,10 @@ export default function ShippingPage() {
   useEffect(() => {
     clear();
   }, [importId, clear]);
+
+  useEffect(() => {
+    setCanProceedToCheckout(readyShipments.length > 0);
+  }, [readyShipments.length, setCanProceedToCheckout]);
 
   useEffect(() => {
     autoAssignedRef.current = false;

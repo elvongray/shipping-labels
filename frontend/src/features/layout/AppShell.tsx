@@ -26,6 +26,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import ConfirmDialog from "@/features/common/ConfirmDialog";
+import { useWizardStore } from "@/stores/wizard.store";
 
 const navItems = [
   { label: "Dashboard", to: "/", icon: LayoutDashboard },
@@ -59,13 +60,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const highlightWizard = isWizardPath(pathname);
   const lastMatch = matches[matches.length - 1];
   const importId = lastMatch?.params?.importId as string | undefined;
-  const stepMeta = getStepMeta(pathname, importId);
+  const canProceedToCheckout = useWizardStore(
+    (state) => state.canProceedToCheckout,
+  );
+  const stepMeta = getStepMeta(pathname, importId, canProceedToCheckout);
   const sectionHeaderClass = "flex h-16 items-center justify-between px-4";
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <SidebarProvider className="min-h-screen w-full flex-col bg-muted/30">
-      <header className="flex h-14 items-center justify-between border-b bg-background px-6">
+      <header className="fixed top-0 z-50 flex h-14 w-full items-center justify-between border-b bg-background px-6">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <SidebarTrigger className="md:hidden" />
           <div className="h-8 w-8 rounded-md bg-primary/10" />
@@ -80,9 +84,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="flex min-h-[calc(100vh-3.5rem)] w-full">
+      <div className="flex min-h-[calc(100vh-3.5rem)] w-full pt-14">
         <Sidebar collapsible="icon">
-          <SidebarHeader className={`${sectionHeaderClass} border-b py-0`}>
+          <SidebarHeader className={`${sectionHeaderClass} py-0`}>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Navigation
             </div>
@@ -183,7 +187,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function getStepMeta(pathname: string, importId?: string) {
+function getStepMeta(
+  pathname: string,
+  importId?: string,
+  canProceedToCheckout = true,
+) {
   if (pathname.startsWith("/upload")) {
     return {
       title: "Upload CSV",
@@ -212,7 +220,8 @@ function getStepMeta(pathname: string, importId?: string) {
       backLabel: "Back",
       nextLabel: "Continue",
       backTo: importId ? `/review/${importId}` : undefined,
-      nextTo: importId ? `/checkout/${importId}` : undefined,
+      nextTo:
+        importId && canProceedToCheckout ? `/checkout/${importId}` : undefined,
     };
   }
 
