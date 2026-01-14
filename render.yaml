@@ -25,6 +25,11 @@ services:
           name: celery-redis
           type: redis
           property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: celery-redis
+          type: redis
+          property: connectionString
 
   - type: web
     plan: starter
