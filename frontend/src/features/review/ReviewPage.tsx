@@ -67,6 +67,7 @@ export default function ReviewPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 30;
+  const [hidePurchased, setHidePurchased] = useState(true);
   const [editAddressShipment, setEditAddressShipment] =
     useState<Shipment | null>(null);
   const [editAddressType, setEditAddressType] = useState<"from" | "to">("from");
@@ -93,7 +94,7 @@ export default function ReviewPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, debouncedSearch]);
+  }, [statusFilter, debouncedSearch, hidePurchased]);
 
   useEffect(() => {
     clear();
@@ -125,7 +126,13 @@ export default function ReviewPage() {
     queryKey: [
       "shipments",
       importId,
-      { status: statusFilter, search: debouncedSearch, page, pageSize },
+      {
+        status: statusFilter,
+        search: debouncedSearch,
+        page,
+        pageSize,
+        label_status: hidePurchased ? "NOT_PURCHASED" : undefined,
+      },
     ],
     queryFn: () =>
       listShipments(importId, {
@@ -133,6 +140,7 @@ export default function ReviewPage() {
         search: debouncedSearch || undefined,
         page,
         page_size: pageSize,
+        label_status: hidePurchased ? "NOT_PURCHASED" : undefined,
       }),
     enabled: Boolean(importId),
     refetchInterval: () => {
@@ -400,54 +408,60 @@ export default function ReviewPage() {
       <h1 className="text-2xl font-semibold">Review & Edit</h1>
       <p className="mt-2 text-sm text-muted-foreground">Import: {importId}</p>
 
-      <Card className="mt-6 w-full max-w-full">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Import status</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Live progress updates while processing.
-            </p>
-          </div>
-          {importQuery.isLoading ? (
-            <Spinner />
-          ) : importJob ? (
-            <Badge variant="outline">{importJob.status}</Badge>
-          ) : null}
-        </CardHeader>
-        <CardContent className="space-y-4 min-w-0">
-          {importQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading status…</div>
-          ) : error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-              <div>{error.message}</div>
-              {import.meta.env.DEV && error.requestId ? (
-                <div className="mt-1 text-xs text-destructive/80">
-                  Request ID: {error.requestId}
-                </div>
-              ) : null}
+      {importJob &&
+      progressTotal > 0 &&
+      progressDone >= progressTotal ? null : (
+        <Card className="mt-6 w-full max-w-full">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Import status</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Live progress updates while processing.
+              </p>
             </div>
-          ) : importJob ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>
-                  {progressDone} of {progressTotal} rows processed
-                </span>
-                <span>{Math.round(progressValue)}%</span>
+            {importQuery.isLoading ? (
+              <Spinner />
+            ) : importJob ? (
+              <Badge variant="outline">{importJob.status}</Badge>
+            ) : null}
+          </CardHeader>
+          <CardContent className="space-y-4 min-w-0">
+            {importQuery.isLoading ? (
+              <div className="text-sm text-muted-foreground">
+                Loading status…
               </div>
-              <Progress value={progressValue} />
-              {importJob.error_summary ? (
-                <div className="text-sm text-destructive">
-                  {importJob.error_summary}
+            ) : error ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+                <div>{error.message}</div>
+                {import.meta.env.DEV && error.requestId ? (
+                  <div className="mt-1 text-xs text-destructive/80">
+                    Request ID: {error.requestId}
+                  </div>
+                ) : null}
+              </div>
+            ) : importJob ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    {progressDone} of {progressTotal} rows processed
+                  </span>
+                  <span>{Math.round(progressValue)}%</span>
                 </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              Import not found.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                <Progress value={progressValue} />
+                {importJob.error_summary ? (
+                  <div className="text-sm text-destructive">
+                    {importJob.error_summary}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Import not found.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mt-6 w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
@@ -572,6 +586,15 @@ export default function ReviewPage() {
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
               />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={hidePurchased}
+                onCheckedChange={(checked) =>
+                  setHidePurchased(checked === true)
+                }
+              />
+              <span>Hide purchased</span>
             </div>
           </div>
           {selectedCount > 0 ? (

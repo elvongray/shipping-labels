@@ -26,6 +26,7 @@ export type ListShipmentsParams = {
   search?: string;
   page?: number;
   page_size?: number;
+  label_status?: string;
 };
 
 function buildQuery(params?: Record<string, string | number | undefined>) {

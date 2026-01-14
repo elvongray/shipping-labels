@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { purchase, getImport, listShipments } from "@/api/endpoints";
@@ -23,15 +23,16 @@ export default function CheckoutPage() {
     "LABEL_4X6",
   );
   const [agree, setAgree] = useState(false);
+  const redirectedRef = useRef(false);
 
-  useQuery({
+  const importQuery = useQuery({
     queryKey: ["importJob", importId],
     queryFn: () => getImport(importId),
   });
 
   const shipmentsQuery = useQuery({
-    queryKey: ["shipments", importId],
-    queryFn: () => listShipments(importId),
+    queryKey: ["shipments", importId, { label_status: "NOT_PURCHASED" }],
+    queryFn: () => listShipments(importId, { label_status: "NOT_PURCHASED" }),
     enabled: Boolean(importId),
   });
 
@@ -39,20 +40,39 @@ export default function CheckoutPage() {
   const readyShipments = shipments.filter(
     (shipment) => shipment.validation_status === "READY",
   );
-  const missingService = readyShipments.filter(
-    (shipment) => !shipment.selected_service,
+  const readyWithService = readyShipments.filter(
+    (shipment) => shipment.selected_service,
   );
-  const totalCents = readyShipments.reduce(
+  const readyWithServiceAndVerified = readyWithService.filter((shipment) =>
+    ["VALID", "CORRECTED"].includes(
+      shipment.address_verification_status ?? "NOT_STARTED",
+    ),
+  );
+  const totalCents = readyWithServiceAndVerified.reduce(
     (sum, shipment) => sum + (shipment.selected_service_price_cents ?? 0),
     0,
   );
+
+  const readyCount = readyShipments.length;
+  const readyWithServiceCount =
+    importQuery.data?.ready_with_service_count ?? readyWithService.length;
+  const purchasableCount =
+    importQuery.data?.purchasable_count ?? readyWithServiceAndVerified.length;
+  const missingServiceCount = Math.max(0, readyCount - readyWithServiceCount);
+  const addressUnverifiedCount =
+    importQuery.data?.address_unverified_count ?? 0;
 
   const purchaseMutation = useMutation({
     mutationFn: () =>
       purchase(importId, {
         label_format: labelFormat,
         agree_to_terms: agree,
-      }) as Promise<{ purchase_id: string; label_download_url: string }>,
+      }) as Promise<{
+        purchase_id: string;
+        label_download_url: string;
+        purchased_count: number;
+        skipped_count: number;
+      }>,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["importJob", importId] });
       toast.success("Purchase complete");
@@ -61,6 +81,8 @@ export default function CheckoutPage() {
         search: {
           purchaseId: data.purchase_id,
           labelUrl: data.label_download_url,
+          purchasedCount: data.purchased_count,
+          skippedCount: data.skipped_count,
         },
       });
     },
@@ -73,8 +95,17 @@ export default function CheckoutPage() {
     },
   });
 
-  const canPurchase =
-    readyShipments.length > 0 && missingService.length === 0 && agree;
+  const canPurchase = purchasableCount > 0 && agree;
+
+  useEffect(() => {
+    if (shipmentsQuery.isLoading) return;
+    if (readyShipments.length === 0) {
+      if (redirectedRef.current) return;
+      redirectedRef.current = true;
+      toast.error("No ready shipments to purchase");
+      navigate({ to: `/shipping/${importId}` });
+    }
+  }, [shipmentsQuery.isLoading, readyShipments.length, importId, navigate]);
 
   return (
     <div className="p-6 space-y-6">
@@ -94,7 +125,7 @@ export default function CheckoutPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Ready shipments</p>
-              <p className="text-lg font-semibold">{readyShipments.length}</p>
+              <p className="text-lg font-semibold">{readyCount}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Total</p>
@@ -104,9 +135,9 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {missingService.length > 0 ? (
+          {missingServiceCount > 0 ? (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              {missingService.length} ready shipment(s) are missing a service.
+              {missingServiceCount} ready shipment(s) are missing a service.
               <Button
                 variant="outline"
                 size="sm"
@@ -115,6 +146,13 @@ export default function CheckoutPage() {
               >
                 Fix in Shipping
               </Button>
+            </div>
+          ) : null}
+
+          {addressUnverifiedCount > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {addressUnverifiedCount} ready shipment(s) need address
+              verification.
             </div>
           ) : null}
 

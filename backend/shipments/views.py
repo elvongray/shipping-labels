@@ -33,9 +33,12 @@ class ImportShipmentListView(ListAPIView):
     def get_queryset(self):
         queryset = Shipment.objects.filter(import_job_id=self.kwargs["import_id"])
         status_param = self.request.query_params.get("status")
+        label_status = self.request.query_params.get("label_status")
         search = self.request.query_params.get("search")
         if status_param:
             queryset = queryset.filter(validation_status=status_param)
+        if label_status:
+            queryset = queryset.filter(label_status=label_status)
         if search:
             queryset = queryset.filter(
                 Q(external_order_number__icontains=search)

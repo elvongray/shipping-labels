@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import {
@@ -56,8 +56,8 @@ export default function ShippingPage() {
   });
 
   const shipmentsQuery = useQuery({
-    queryKey: ["shipments", importId],
-    queryFn: () => listShipments(importId),
+    queryKey: ["shipments", importId, { label_status: "NOT_PURCHASED" }],
+    queryFn: () => listShipments(importId, { label_status: "NOT_PURCHASED" }),
     enabled: Boolean(importId),
   });
 
@@ -132,6 +132,10 @@ export default function ShippingPage() {
     clear();
   }, [importId, clear]);
 
+  useEffect(() => {
+    autoAssignedRef.current = false;
+  }, [importId]);
+
   const bulkMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
       bulkShipments(importId, payload),
@@ -148,6 +152,27 @@ export default function ShippingPage() {
     },
   });
 
+  const autoAssignMutation = useMutation({
+    mutationFn: (
+      groups: Array<{ service: string; price: number; ids: string[] }>,
+    ) =>
+      Promise.all(
+        groups.map((group) =>
+          bulkShipments(importId, {
+            action: "set_shipping_service",
+            shipment_ids: group.ids,
+            payload: {
+              service: group.service,
+              price_cents: group.price,
+            },
+          }),
+        ),
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shipments", importId] });
+    },
+  });
+
   const cheapestByShipment = useMemo(() => {
     const entries = readyShipments.map((shipment) => {
       const quotes = quotesByShipment.get(shipment.id) ?? [];
@@ -159,6 +184,52 @@ export default function ShippingPage() {
     });
     return entries;
   }, [readyShipments, quotesByShipment]);
+
+  const autoAssignedRef = useRef(false);
+
+  useEffect(() => {
+    if (autoAssignedRef.current) return;
+    if (shipmentsQuery.isLoading || quoteQuery.isLoading) return;
+    if (readyShipments.length === 0) return;
+
+    const missingService = readyShipments.filter(
+      (shipment) => !shipment.selected_service,
+    );
+    if (missingService.length === 0) return;
+
+    const grouped = missingService.reduce<
+      Record<string, { price: number; ids: string[] }>
+    >((acc, shipment) => {
+      const quotes = quotesByShipment.get(shipment.id) ?? [];
+      const cheapest = quotes.reduce<QuoteItem | null>((prev, quote) => {
+        if (!prev || quote.price_cents < prev.price_cents) return quote;
+        return prev;
+      }, null);
+      if (!cheapest) return acc;
+      const key = cheapest.service;
+      if (!acc[key]) {
+        acc[key] = { price: cheapest.price_cents, ids: [] };
+      }
+      acc[key].ids.push(shipment.id);
+      return acc;
+    }, {});
+
+    const groups = Object.entries(grouped).map(([service, data]) => ({
+      service,
+      price: data.price,
+      ids: data.ids,
+    }));
+
+    if (groups.length === 0) return;
+    autoAssignedRef.current = true;
+    autoAssignMutation.mutate(groups);
+  }, [
+    shipmentsQuery.isLoading,
+    quoteQuery.isLoading,
+    readyShipments,
+    quotesByShipment,
+    autoAssignMutation,
+  ]);
 
   const availableServices = useMemo(() => {
     const idsToScan =

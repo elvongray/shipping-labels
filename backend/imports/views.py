@@ -134,6 +134,28 @@ class ImportJobDetailView(APIView):
                         ]
                     ),
                 ),
+                ready_with_service_count=Count(
+                    "shipments",
+                    filter=Q(
+                        shipments__validation_status=Shipment.ValidationStatus.READY
+                    )
+                    & ~Q(shipments__selected_service="")
+                    & Q(shipments__selected_service__isnull=False),
+                ),
+                purchasable_count=Count(
+                    "shipments",
+                    filter=Q(
+                        shipments__validation_status=Shipment.ValidationStatus.READY
+                    )
+                    & ~Q(shipments__selected_service="")
+                    & Q(shipments__selected_service__isnull=False)
+                    & Q(
+                        shipments__address_verification_status__in=[
+                            Shipment.AddressVerificationStatus.VALID,
+                            Shipment.AddressVerificationStatus.CORRECTED,
+                        ]
+                    ),
+                ),
             )
             .first()
         )
@@ -175,23 +197,32 @@ class ImportPurchaseView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        missing_ready = shipments.exclude(
-            validation_status=Shipment.ValidationStatus.READY
-        ).exists()
-        missing_service = shipments.filter(selected_service="").exists()
-        if missing_ready or missing_service:
+        eligible_shipments = (
+            shipments.filter(
+                validation_status=Shipment.ValidationStatus.READY,
+                selected_service__isnull=False,
+            )
+            .exclude(selected_service="")
+            .filter(
+                address_verification_status__in=[
+                    Shipment.AddressVerificationStatus.VALID,
+                    Shipment.AddressVerificationStatus.CORRECTED,
+                ]
+            )
+        )
+        if not eligible_shipments.exists():
             return Response(
                 {
                     "error": {
                         "code": "NOT_READY",
-                        "message": "All shipments must be READY and have a service",
+                        "message": "No READY shipments with verified addresses and services",
                     }
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         purchase_id = str(uuid.uuid4())
-        for shipment in shipments:
+        for shipment in eligible_shipments:
             shipment.label_status = Shipment.LabelStatus.PURCHASED
             shipment.label_url = (
                 f"https://example.com/labels/{purchase_id}/{shipment.id}.pdf"
@@ -203,5 +234,7 @@ class ImportPurchaseView(APIView):
                 "purchase_id": purchase_id,
                 "label_format": label_format,
                 "label_download_url": f"https://example.com/labels/{purchase_id}.pdf",
+                "purchased_count": eligible_shipments.count(),
+                "skipped_count": shipments.count() - eligible_shipments.count(),
             }
         )

@@ -217,7 +217,7 @@ function getStepMeta(pathname: string, importId?: string) {
   if (pathname.startsWith("/checkout")) {
     return {
       title: "Checkout",
-      showActions: true,
+      showActions: false,
       backLabel: "Back",
       nextLabel: "Purchase",
       backTo: importId ? `/shipping/${importId}` : undefined,

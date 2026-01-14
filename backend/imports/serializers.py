@@ -21,6 +21,8 @@ class ImportJobDetailSerializer(serializers.ModelSerializer):
     needs_info_count = serializers.IntegerField(read_only=True)
     invalid_count = serializers.IntegerField(read_only=True)
     address_unverified_count = serializers.IntegerField(read_only=True)
+    ready_with_service_count = serializers.IntegerField(read_only=True)
+    purchasable_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = ImportJob
@@ -35,6 +37,8 @@ class ImportJobDetailSerializer(serializers.ModelSerializer):
             "needs_info_count",
             "invalid_count",
             "address_unverified_count",
+            "ready_with_service_count",
+            "purchasable_count",
         )
 
 
@@ -42,6 +46,8 @@ class ImportPurchaseResponseSerializer(serializers.Serializer):
     purchase_id = serializers.UUIDField()
     label_format = serializers.CharField()
     label_download_url = serializers.URLField()
+    purchased_count = serializers.IntegerField()
+    skipped_count = serializers.IntegerField()
 
 
 class ImportBulkResponseSerializer(serializers.Serializer):
