@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";

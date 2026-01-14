@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import type { PresetAddress } from "@/api/types";

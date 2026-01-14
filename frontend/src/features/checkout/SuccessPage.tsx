@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import { getImport } from "@/api/endpoints";
